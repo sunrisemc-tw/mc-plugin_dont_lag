@@ -48,7 +48,7 @@ public class ToolManager {
             List<String> lore = new ArrayList<>();
             lore.add(ChatColor.GRAY + "右鍵點擊生物來切換 AI 狀態");
             lore.add(ChatColor.GRAY + "關閉 AI 可減輕伺服器負擔");
-            lore.add(ChatColor.YELLOW + "左鍵點擊查看生物 AI 狀態");
+            lore.add(ChatColor.YELLOW + "左鍵點擊查看使用說明");
             meta.setLore(lore);
             
             stick.setItemMeta(meta);
