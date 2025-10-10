@@ -11,6 +11,7 @@ import tw.sunrisemc.dontlag.DontLag;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 public class DelagCommand implements CommandExecutor, TabCompleter {
     
@@ -28,8 +29,11 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         }
         
         switch (args[0].toLowerCase()) {
-            case "set":
-                return handleSet(sender);
+            case "ai":
+                return handleAI(sender, args);
+                
+            case "villager":
+                return handleVillager(sender, args);
                 
             case "info":
                 return handleInfo(sender);
@@ -44,9 +48,26 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
     }
     
     /**
-     * 處理 /delag set 指令
+     * 處理 /delag ai 指令
      */
-    private boolean handleSet(CommandSender sender) {
+    private boolean handleAI(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag ai set");
+            return true;
+        }
+        
+        if (args[1].equalsIgnoreCase("set")) {
+            return handleAISet(sender);
+        }
+        
+        sender.sendMessage(ChatColor.RED + "用法: /delag ai set");
+        return true;
+    }
+    
+    /**
+     * 處理 /delag ai set 指令
+     */
+    private boolean handleAISet(CommandSender sender) {
         if (!(sender instanceof Player)) {
             sender.sendMessage(ChatColor.RED + "此指令只能由玩家執行！");
             return true;
@@ -73,6 +94,53 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
     }
     
     /**
+     * 處理 /delag villager 指令
+     */
+    private boolean handleVillager(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag villager set");
+            return true;
+        }
+        
+        if (args[1].equalsIgnoreCase("set")) {
+            return handleVillagerSet(sender);
+        }
+        
+        sender.sendMessage(ChatColor.RED + "用法: /delag villager set");
+        return true;
+    }
+    
+    /**
+     * 處理 /delag villager set 指令
+     */
+    private boolean handleVillagerSet(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "此指令只能由玩家執行！");
+            return true;
+        }
+        
+        if (!sender.hasPermission("dontlag.admin")) {
+            sender.sendMessage(ChatColor.RED + "你沒有權限使用此指令！");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        boolean isVillagerToolUser = plugin.getToolManager().isVillagerToolUser(player.getUniqueId());
+        
+        if (isVillagerToolUser) {
+            plugin.getToolManager().setVillagerToolUser(player, false);
+            player.sendMessage(ChatColor.YELLOW + "已關閉村民優化工具模式");
+        } else {
+            plugin.getToolManager().setVillagerToolUser(player, true);
+            player.sendMessage(ChatColor.GREEN + "已啟用村民優化工具模式！");
+            player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊村民來優化其功能");
+            player.sendMessage(ChatColor.GRAY + "優化後村民只保留交易和補貨功能");
+        }
+        
+        return true;
+    }
+    
+    /**
      * 處理 /delag info 指令
      */
     private boolean handleInfo(CommandSender sender) {
@@ -82,11 +150,26 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         }
         
         int disabledCount = plugin.getAIManager().getDisabledCount();
+        int optimizedVillagers = plugin.getVillagerManager().getOptimizedCount();
         
-        sender.sendMessage(ChatColor.GOLD + "========== DontLag 資訊 ==========");
+        // 獲取自動優化統計
+        Map<String, Object> autoStats = plugin.getAutoVillagerOptimizer().getStats();
+        
+        sender.sendMessage(ChatColor.GOLD + "============ DontLag 資訊 ============");
         sender.sendMessage(ChatColor.YELLOW + "版本: " + ChatColor.WHITE + plugin.getDescription().getVersion());
-        sender.sendMessage(ChatColor.YELLOW + "已關閉 AI 的生物數量: " + ChatColor.WHITE + disabledCount);
-        sender.sendMessage(ChatColor.GOLD + "================================");
+        sender.sendMessage("");
+        sender.sendMessage(ChatColor.AQUA + "手動優化:");
+        sender.sendMessage(ChatColor.YELLOW + "  已關閉 AI 的生物: " + ChatColor.WHITE + disabledCount);
+        sender.sendMessage(ChatColor.YELLOW + "  已優化的村民: " + ChatColor.WHITE + optimizedVillagers);
+        sender.sendMessage("");
+        sender.sendMessage(ChatColor.AQUA + "自動村民優化:");
+        sender.sendMessage(ChatColor.YELLOW + "  狀態: " + (autoStats.get("enabled").equals(true) ? 
+                         ChatColor.GREEN + "啟用" : ChatColor.RED + "停用"));
+        sender.sendMessage(ChatColor.YELLOW + "  閾值: " + ChatColor.WHITE + autoStats.get("threshold") + " 隻/區塊");
+        sender.sendMessage(ChatColor.YELLOW + "  追蹤區塊數: " + ChatColor.WHITE + autoStats.get("totalChunks"));
+        sender.sendMessage(ChatColor.YELLOW + "  追蹤村民數: " + ChatColor.WHITE + autoStats.get("totalVillagers"));
+        sender.sendMessage(ChatColor.YELLOW + "  永久優化數: " + ChatColor.WHITE + autoStats.get("permanentlyOptimized"));
+        sender.sendMessage(ChatColor.GOLD + "======================================");
         
         return true;
     }
@@ -100,8 +183,9 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         
-        plugin.reloadConfig();
+        plugin.reloadPluginConfig();
         sender.sendMessage(ChatColor.GREEN + "配置已重新載入！");
+        sender.sendMessage(ChatColor.YELLOW + "自動優化系統已根據新配置重新啟動");
         
         return true;
     }
@@ -111,10 +195,13 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
      */
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(ChatColor.GOLD + "========== DontLag 指令幫助 ==========");
-        sender.sendMessage(ChatColor.YELLOW + "/delag set" + ChatColor.WHITE + " - 切換 AI 控制工具模式");
-        sender.sendMessage(ChatColor.YELLOW + "/delag info" + ChatColor.WHITE + " - 查看插件資訊");
+        sender.sendMessage(ChatColor.YELLOW + "/delag ai set" + ChatColor.WHITE + " - 切換 AI 控制工具模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag villager set" + ChatColor.WHITE + " - 切換村民優化工具模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag info" + ChatColor.WHITE + " - 查看插件資訊和統計");
         sender.sendMessage(ChatColor.YELLOW + "/delag reload" + ChatColor.WHITE + " - 重新載入配置");
-        sender.sendMessage(ChatColor.GOLD + "=====================================");
+        sender.sendMessage(ChatColor.GRAY + "提示: 自動村民優化功能會在區塊村民");
+        sender.sendMessage(ChatColor.GRAY + "      超過閾值時自動優化（可在配置中調整）");
+        sender.sendMessage(ChatColor.GOLD + "======================================");
     }
     
     @Override
@@ -122,12 +209,23 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("set", "info", "reload");
+            List<String> subcommands = Arrays.asList("ai", "villager", "info", "reload");
             String input = args[0].toLowerCase();
             
             for (String subcommand : subcommands) {
                 if (subcommand.startsWith(input)) {
                     completions.add(subcommand);
+                }
+            }
+        } else if (args.length == 2) {
+            if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager")) {
+                List<String> subcommands = Arrays.asList("set");
+                String input = args[1].toLowerCase();
+                
+                for (String subcommand : subcommands) {
+                    if (subcommand.startsWith(input)) {
+                        completions.add(subcommand);
+                    }
                 }
             }
         }

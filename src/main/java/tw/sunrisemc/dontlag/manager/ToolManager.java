@@ -14,7 +14,9 @@ import java.util.UUID;
 public class ToolManager {
     
     private final HashMap<UUID, Boolean> toolUsers = new HashMap<>();
+    private final HashMap<UUID, Boolean> villagerToolUsers = new HashMap<>();
     private static final String TOOL_NAME = ChatColor.GOLD + "" + ChatColor.BOLD + "AI 控制工具";
+    private static final String VILLAGER_TOOL_NAME = ChatColor.AQUA + "" + ChatColor.BOLD + "村民優化工具";
     
     /**
      * 設定玩家是否持有 AI 控制工具
@@ -33,6 +35,48 @@ public class ToolManager {
      */
     public boolean isToolUser(UUID uuid) {
         return toolUsers.getOrDefault(uuid, false);
+    }
+    
+    /**
+     * 設定玩家是否持有村民優化工具
+     */
+    public void setVillagerToolUser(Player player, boolean enabled) {
+        if (enabled) {
+            villagerToolUsers.put(player.getUniqueId(), true);
+            giveVillagerTool(player);
+        } else {
+            villagerToolUsers.remove(player.getUniqueId());
+        }
+    }
+    
+    /**
+     * 檢查玩家是否為村民工具使用者
+     */
+    public boolean isVillagerToolUser(UUID uuid) {
+        return villagerToolUsers.getOrDefault(uuid, false);
+    }
+    
+    /**
+     * 給予玩家村民優化工具
+     */
+    private void giveVillagerTool(Player player) {
+        ItemStack stick = new ItemStack(Material.STICK);
+        ItemMeta meta = stick.getItemMeta();
+        
+        if (meta != null) {
+            meta.setDisplayName(VILLAGER_TOOL_NAME);
+            
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "右鍵點擊村民來優化其功能");
+            lore.add(ChatColor.GRAY + "只保留交易和補貨功能");
+            lore.add(ChatColor.GRAY + "移除代理(gossip)、工作站尋找等");
+            lore.add(ChatColor.YELLOW + "左鍵點擊查看使用說明");
+            meta.setLore(lore);
+            
+            stick.setItemMeta(meta);
+        }
+        
+        player.getInventory().addItem(stick);
     }
     
     /**
@@ -71,6 +115,22 @@ public class ToolManager {
         }
         
         return meta.getDisplayName().equals(TOOL_NAME);
+    }
+    
+    /**
+     * 檢查物品是否為村民優化工具
+     */
+    public boolean isVillagerTool(ItemStack item) {
+        if (item == null || item.getType() != Material.STICK) {
+            return false;
+        }
+        
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) {
+            return false;
+        }
+        
+        return meta.getDisplayName().equals(VILLAGER_TOOL_NAME);
     }
 }
 

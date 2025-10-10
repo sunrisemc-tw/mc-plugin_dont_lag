@@ -32,16 +32,25 @@ public class EntityInteractListener implements Listener {
         Entity entity = event.getRightClicked();
         ItemStack item = player.getInventory().getItemInMainHand();
         
-        // 檢查玩家是否為工具使用者
-        if (!plugin.getToolManager().isToolUser(player.getUniqueId())) {
+        // 處理村民優化工具
+        if (plugin.getToolManager().isVillagerToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isVillagerTool(item)) {
+            handleVillagerOptimization(player, entity, event);
             return;
         }
         
-        // 檢查是否持有 AI 控制工具
-        if (!plugin.getToolManager().isAITool(item)) {
+        // 處理 AI 控制工具
+        if (plugin.getToolManager().isToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isAITool(item)) {
+            handleAIControl(player, entity, event);
             return;
         }
-        
+    }
+    
+    /**
+     * 處理 AI 控制
+     */
+    private void handleAIControl(Player player, Entity entity, PlayerInteractEntityEvent event) {
         // 檢查權限
         if (!player.hasPermission("dontlag.use")) {
             player.sendMessage(ChatColor.RED + "你沒有權限使用此功能！");
@@ -78,39 +87,96 @@ public class EntityInteractListener implements Listener {
         }
     }
     
+    /**
+     * 處理村民優化
+     */
+    private void handleVillagerOptimization(Player player, Entity entity, PlayerInteractEntityEvent event) {
+        // 檢查權限
+        if (!player.hasPermission("dontlag.use")) {
+            player.sendMessage(ChatColor.RED + "你沒有權限使用此功能！");
+            return;
+        }
+        
+        // 檢查是否為村民
+        if (!(entity instanceof org.bukkit.entity.Villager)) {
+            player.sendMessage(ChatColor.RED + "此工具只能用於村民！");
+            return;
+        }
+        
+        // 防止重複觸發
+        UUID entityUUID = entity.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+        Long lastTime = lastInteraction.get(entityUUID);
+        
+        if (lastTime != null && (currentTime - lastTime) < COOLDOWN) {
+            return;
+        }
+        
+        lastInteraction.put(entityUUID, currentTime);
+        
+        // 取消原本的互動
+        event.setCancelled(true);
+        
+        // 切換優化狀態
+        boolean optimized = plugin.getVillagerManager().toggleOptimization(entity);
+        
+        String entityName = getEntityDisplayName(entity);
+        
+        if (optimized) {
+            player.sendMessage(ChatColor.GREEN + "已優化村民 " + ChatColor.YELLOW + entityName);
+            player.sendMessage(ChatColor.GRAY + "該村民現在只保留交易和補貨功能");
+            player.sendMessage(ChatColor.GRAY + "已移除: 代理(gossip)、尋路、工作站尋找等");
+        } else {
+            player.sendMessage(ChatColor.YELLOW + "已恢復村民 " + ChatColor.YELLOW + entityName + 
+                             ChatColor.YELLOW + " 的所有功能");
+            player.sendMessage(ChatColor.GRAY + "該村民現在恢復正常行為");
+        }
+    }
+    
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
         ItemStack item = player.getInventory().getItemInMainHand();
         
         // 只處理左鍵點擊空氣或方塊
-        if (event.getAction().toString().contains("LEFT_CLICK")) {
-            // 檢查玩家是否為工具使用者
-            if (!plugin.getToolManager().isToolUser(player.getUniqueId())) {
-                return;
-            }
+        if (!event.getAction().toString().contains("LEFT_CLICK")) {
+            return;
+        }
+        
+        // 檢查權限
+        if (!player.hasPermission("dontlag.use")) {
+            return;
+        }
+        
+        // 處理 AI 控制工具
+        if (plugin.getToolManager().isToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isAITool(item)) {
             
-            // 檢查是否持有 AI 控制工具
-            if (!plugin.getToolManager().isAITool(item)) {
-                return;
-            }
-            
-            // 檢查權限
-            if (!player.hasPermission("dontlag.use")) {
-                player.sendMessage(ChatColor.RED + "你沒有權限使用此功能！");
-                return;
-            }
-            
-            // 取消原本的互動
             event.setCancelled(true);
             
-            // 顯示使用說明
             player.sendMessage(ChatColor.GOLD + "========== AI 控制工具 ==========");
             player.sendMessage(ChatColor.YELLOW + "右鍵點擊生物: " + ChatColor.WHITE + "切換 AI 狀態");
             player.sendMessage(ChatColor.YELLOW + "左鍵點擊: " + ChatColor.WHITE + "顯示此說明");
             player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + plugin.getAIManager().getDisabledCount() + 
                              ChatColor.GRAY + " 個生物的 AI 被禁用");
             player.sendMessage(ChatColor.GOLD + "================================");
+            return;
+        }
+        
+        // 處理村民優化工具
+        if (plugin.getToolManager().isVillagerToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isVillagerTool(item)) {
+            
+            event.setCancelled(true);
+            
+            player.sendMessage(ChatColor.GOLD + "========== 村民優化工具 ==========");
+            player.sendMessage(ChatColor.YELLOW + "右鍵點擊村民: " + ChatColor.WHITE + "優化村民功能");
+            player.sendMessage(ChatColor.YELLOW + "左鍵點擊: " + ChatColor.WHITE + "顯示此說明");
+            player.sendMessage(ChatColor.GRAY + "優化內容: " + ChatColor.WHITE + "只保留交易和補貨");
+            player.sendMessage(ChatColor.GRAY + "移除內容: " + ChatColor.WHITE + "代理、尋路、工作站尋找");
+            player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + plugin.getVillagerManager().getOptimizedCount() + 
+                             ChatColor.GRAY + " 個村民被優化");
+            player.sendMessage(ChatColor.GOLD + "=================================");
         }
     }
     
