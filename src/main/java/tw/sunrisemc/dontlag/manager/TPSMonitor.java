@@ -89,20 +89,25 @@ public class TPSMonitor {
      */
     private double getTPS() {
         try {
-            // 使用 Bukkit.getTPS() 獲取 TPS（Paper/Spigot 1.18+）
-            double[] tpsArray = Bukkit.getTPS();
+            // 嘗試使用反射獲取 TPS（Paper 專屬）
+            Object server = Bukkit.getServer();
+            java.lang.reflect.Method getTpsMethod = server.getClass().getMethod("getTPS");
+            double[] tpsArray = (double[]) getTpsMethod.invoke(server);
             return tpsArray[0]; // 返回 1 分鐘平均 TPS
         } catch (Exception e) {
-            // 如果不支援 getTPS()，使用簡單的估算
+            // 如果不支援反射，使用簡單的 tick 計數估算
+            // 這個方法不太精確，但在 Spigot 上可用
             long currentTime = System.currentTimeMillis();
             long timeDiff = currentTime - lastTickTime;
             lastTickTime = currentTime;
             
-            if (timeDiff == 0) {
-                return 20.0;
+            if (timeDiff == 0 || timeDiff > 100) {
+                return 20.0; // 假設正常
             }
             
-            return Math.min(20.0, 1000.0 / timeDiff);
+            // 計算 TPS：1000ms / timeDiff = 每秒 ticks
+            double tps = 1000.0 / timeDiff;
+            return Math.min(20.0, tps);
         }
     }
     

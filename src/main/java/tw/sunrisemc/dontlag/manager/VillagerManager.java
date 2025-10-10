@@ -50,16 +50,14 @@ public class VillagerManager {
         // 關閉 AI（但村民仍可交易和補貨）
         villager.setAware(false);
         
-        // 清除村民的代理（gossip）
-        villager.getGossips().forEach((uuid, gossip) -> {
-            villager.getGossips().remove(uuid);
-        });
-        
         // 設置村民不會四處遊蕩
         villager.setCollidable(true); // 保持碰撞以便互動
         
-        // 移除所有記憶
-        villager.getMemory().clear();
+        // 移除尋路目標
+        villager.setAI(false);
+        
+        // 注意：Gossip 和 Memory 清除需要 Paper API 或 NMS
+        // 在標準 Spigot 中，setAware(false) 已經足夠停止大部分 AI 行為
     }
     
     /**
@@ -68,6 +66,7 @@ public class VillagerManager {
     private void restoreVillager(Villager villager) {
         // 恢復 AI
         villager.setAware(true);
+        villager.setAI(true);
         
         // 恢復碰撞
         villager.setCollidable(true);

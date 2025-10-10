@@ -202,19 +202,17 @@ public class AutoVillagerOptimizer {
         // 關閉 AI
         villager.setAware(false);
         
-        // 清除代理
-        villager.getGossips().forEach((uuid, gossip) -> {
-            villager.getGossips().remove(uuid);
-        });
-        
-        // 清除記憶
-        villager.getMemory().clear();
+        // 關閉 AI 尋路
+        villager.setAI(false);
         
         // 設置為可碰撞（以便交易）
         villager.setCollidable(true);
         
         // 設置為靜音（可選，減少聲音負擔）
         villager.setSilent(false); // 保留聲音以便玩家知道村民存在
+        
+        // 注意：Gossip 和 Memory 清除需要 Paper API 或 NMS
+        // 在標準 Spigot 中，setAware(false) 和 setAI(false) 已經足夠停止大部分 AI 行為
     }
     
     /**
@@ -267,6 +265,7 @@ public class AutoVillagerOptimizer {
         
         // 恢復村民功能
         villager.setAware(true);
+        villager.setAI(true);
         villager.setCollidable(true);
         
         // 從永久優化列表移除
