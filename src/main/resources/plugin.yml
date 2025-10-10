@@ -1,0 +1,22 @@
+name: DontLag
+version: '${project.version}'
+main: tw.sunrisemc.dontlag.DontLag
+api-version: '1.20'
+author: SunriseMC
+description: 伺服器卡頓優化插件
+
+commands:
+  delag:
+    description: 卡頓優化主指令
+    usage: /<command> [set|info|reload]
+    aliases: [dl, antilag]
+
+permissions:
+  dontlag.admin:
+    description: 管理員權限
+    default: op
+  dontlag.use:
+    description: 使用基本功能
+    default: op
+
+

@@ -1,0 +1,20 @@
+# DontLag 插件配置文件
+
+# 插件設定
+settings:
+  # 是否在生物 AI 被禁用時在其上方顯示標記
+  show-ai-disabled-indicator: true
+  
+  # 伺服器重啟後是否保留 AI 禁用狀態
+  persist-ai-state: false
+
+# 訊息設定
+messages:
+  prefix: "&6[DontLag]&r "
+  ai-disabled: "&a已關閉 {entity} 的 AI"
+  ai-enabled: "&e已恢復 {entity} 的 AI"
+  no-permission: "&c你沒有權限使用此功能！"
+  tool-enabled: "&a已啟用 AI 控制工具模式！"
+  tool-disabled: "&e已關閉 AI 控制工具模式"
+
+
