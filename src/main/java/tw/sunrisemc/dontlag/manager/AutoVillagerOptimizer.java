@@ -256,6 +256,34 @@ public class AutoVillagerOptimizer {
     }
     
     /**
+     * 解除村民的永久優化（OP 管理員棒專用）
+     */
+    public boolean unlockVillager(Villager villager) {
+        UUID uuid = villager.getUniqueId();
+        
+        if (!permanentlyOptimized.contains(uuid)) {
+            return false; // 不是永久優化的村民
+        }
+        
+        // 恢復村民功能
+        villager.setAware(true);
+        villager.setCollidable(true);
+        
+        // 從永久優化列表移除
+        permanentlyOptimized.remove(uuid);
+        
+        // 從區塊追蹤中移除（避免再次被優化）
+        String chunkKey = getChunkKey(villager.getLocation().getChunk());
+        Set<UUID> villagers = chunkVillagers.get(chunkKey);
+        if (villagers != null) {
+            villagers.remove(uuid);
+        }
+        
+        plugin.getLogger().info("管理員解除了村民 " + uuid + " 的永久優化");
+        return true;
+    }
+    
+    /**
      * 設置村民數量閾值
      */
     public void setThreshold(int threshold) {

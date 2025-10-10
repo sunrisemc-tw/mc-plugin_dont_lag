@@ -32,6 +32,13 @@ public class EntityInteractListener implements Listener {
         Entity entity = event.getRightClicked();
         ItemStack item = player.getInventory().getItemInMainHand();
         
+        // 處理 OP 管理員棒
+        if (plugin.getToolManager().isOpToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isOpTool(item)) {
+            handleOpTool(player, entity, event);
+            return;
+        }
+        
         // 處理村民優化工具
         if (plugin.getToolManager().isVillagerToolUser(player.getUniqueId()) && 
             plugin.getToolManager().isVillagerTool(item)) {
@@ -84,6 +91,59 @@ public class EntityInteractListener implements Listener {
             player.sendMessage(ChatColor.YELLOW + "已恢復 " + ChatColor.YELLOW + entityName + 
                              ChatColor.YELLOW + " 的 AI");
             player.sendMessage(ChatColor.GRAY + "該生物現在恢復正常行為");
+        }
+    }
+    
+    /**
+     * 處理 OP 管理員棒
+     */
+    private void handleOpTool(Player player, Entity entity, PlayerInteractEntityEvent event) {
+        // 檢查權限
+        if (!player.hasPermission("dontlag.admin")) {
+            player.sendMessage(ChatColor.RED + "你沒有權限使用此功能！");
+            return;
+        }
+        
+        // 檢查是否為村民
+        if (!(entity instanceof org.bukkit.entity.Villager)) {
+            player.sendMessage(ChatColor.RED + "此工具只能用於村民！");
+            return;
+        }
+        
+        org.bukkit.entity.Villager villager = (org.bukkit.entity.Villager) entity;
+        
+        // 防止重複觸發
+        UUID entityUUID = entity.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+        Long lastTime = lastInteraction.get(entityUUID);
+        
+        if (lastTime != null && (currentTime - lastTime) < COOLDOWN) {
+            return;
+        }
+        
+        lastInteraction.put(entityUUID, currentTime);
+        
+        // 取消原本的互動
+        event.setCancelled(true);
+        
+        // 檢查是否為永久優化的村民
+        if (!plugin.getAutoVillagerOptimizer().isPermanentlyOptimized(entityUUID)) {
+            player.sendMessage(ChatColor.YELLOW + "此村民未被自動優化系統鎖定");
+            player.sendMessage(ChatColor.GRAY + "只能解除自動優化的村民");
+            return;
+        }
+        
+        // 解除永久優化
+        boolean unlocked = plugin.getAutoVillagerOptimizer().unlockVillager(villager);
+        
+        if (unlocked) {
+            String entityName = getEntityDisplayName(entity);
+            player.sendMessage(ChatColor.GREEN + "已解除村民 " + ChatColor.YELLOW + entityName + 
+                             ChatColor.GREEN + " 的永久優化");
+            player.sendMessage(ChatColor.GRAY + "該村民現在恢復正常行為");
+            player.sendMessage(ChatColor.RED + "注意：如果該區域村民仍超過閾值，可能會再次被自動優化");
+        } else {
+            player.sendMessage(ChatColor.RED + "解除優化失敗！");
         }
     }
     
@@ -177,6 +237,23 @@ public class EntityInteractListener implements Listener {
             player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + plugin.getVillagerManager().getOptimizedCount() + 
                              ChatColor.GRAY + " 個村民被優化");
             player.sendMessage(ChatColor.GOLD + "=================================");
+            return;
+        }
+        
+        // 處理 OP 管理員棒
+        if (plugin.getToolManager().isOpToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isOpTool(item)) {
+            
+            event.setCancelled(true);
+            
+            player.sendMessage(ChatColor.GOLD + "========== OP 管理員棒 ==========");
+            player.sendMessage(ChatColor.YELLOW + "右鍵點擊村民: " + ChatColor.WHITE + "解除永久優化");
+            player.sendMessage(ChatColor.YELLOW + "左鍵點擊: " + ChatColor.WHITE + "顯示此說明");
+            player.sendMessage(ChatColor.RED + "專用於解除自動優化系統鎖定的村民");
+            player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + 
+                             plugin.getAutoVillagerOptimizer().getStats().get("permanentlyOptimized") + 
+                             ChatColor.GRAY + " 個村民被永久優化");
+            player.sendMessage(ChatColor.GOLD + "===============================");
         }
     }
     

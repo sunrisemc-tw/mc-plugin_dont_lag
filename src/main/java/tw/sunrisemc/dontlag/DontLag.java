@@ -7,6 +7,7 @@ import tw.sunrisemc.dontlag.listener.VillagerTrackingListener;
 import tw.sunrisemc.dontlag.manager.AIManager;
 import tw.sunrisemc.dontlag.manager.AutoVillagerOptimizer;
 import tw.sunrisemc.dontlag.manager.ToolManager;
+import tw.sunrisemc.dontlag.manager.TPSMonitor;
 import tw.sunrisemc.dontlag.manager.VillagerManager;
 
 public class DontLag extends JavaPlugin {
@@ -16,6 +17,7 @@ public class DontLag extends JavaPlugin {
     private AIManager aiManager;
     private VillagerManager villagerManager;
     private AutoVillagerOptimizer autoVillagerOptimizer;
+    private TPSMonitor tpsMonitor;
     
     @Override
     public void onEnable() {
@@ -29,9 +31,11 @@ public class DontLag extends JavaPlugin {
         aiManager = new AIManager(this);
         villagerManager = new VillagerManager(this);
         autoVillagerOptimizer = new AutoVillagerOptimizer(this, villagerManager);
+        tpsMonitor = new TPSMonitor(this, autoVillagerOptimizer);
         
         // 載入配置並啟動自動優化
         loadAutoOptimizerConfig();
+        loadTPSMonitorConfig();
         
         // 註冊指令
         getCommand("delag").setExecutor(new DelagCommand(this));
@@ -45,6 +49,11 @@ public class DontLag extends JavaPlugin {
     
     @Override
     public void onDisable() {
+        // 停止 TPS 監控
+        if (tpsMonitor != null) {
+            tpsMonitor.stop();
+        }
+        
         // 停止自動優化系統
         if (autoVillagerOptimizer != null) {
             autoVillagerOptimizer.stop();
@@ -83,6 +92,10 @@ public class DontLag extends JavaPlugin {
         return autoVillagerOptimizer;
     }
     
+    public TPSMonitor getTPSMonitor() {
+        return tpsMonitor;
+    }
+    
     /**
      * 載入自動優化配置
      */
@@ -101,11 +114,28 @@ public class DontLag extends JavaPlugin {
     }
     
     /**
+     * 載入 TPS 監控配置
+     */
+    private void loadTPSMonitorConfig() {
+        boolean enabled = getConfig().getBoolean("tps-monitor.enabled", true);
+        double threshold = getConfig().getDouble("tps-monitor.threshold", 15.0);
+        
+        tpsMonitor.setAutoStopEnabled(enabled);
+        tpsMonitor.setTpsThreshold(threshold);
+        
+        if (enabled) {
+            tpsMonitor.reset();
+            tpsMonitor.start();
+        }
+    }
+    
+    /**
      * 重新載入配置
      */
     public void reloadPluginConfig() {
         reloadConfig();
         loadAutoOptimizerConfig();
+        loadTPSMonitorConfig();
     }
 }
 

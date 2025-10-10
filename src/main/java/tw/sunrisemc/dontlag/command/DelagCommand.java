@@ -35,6 +35,9 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             case "villager":
                 return handleVillager(sender, args);
                 
+            case "op":
+                return handleOP(sender, args);
+                
             case "info":
                 return handleInfo(sender);
                 
@@ -141,6 +144,53 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
     }
     
     /**
+     * 處理 /delag op 指令
+     */
+    private boolean handleOP(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag op set");
+            return true;
+        }
+        
+        if (args[1].equalsIgnoreCase("set")) {
+            return handleOPSet(sender);
+        }
+        
+        sender.sendMessage(ChatColor.RED + "用法: /delag op set");
+        return true;
+    }
+    
+    /**
+     * 處理 /delag op set 指令
+     */
+    private boolean handleOPSet(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "此指令只能由玩家執行！");
+            return true;
+        }
+        
+        if (!sender.hasPermission("dontlag.admin")) {
+            sender.sendMessage(ChatColor.RED + "你沒有權限使用此指令！");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        boolean isOpToolUser = plugin.getToolManager().isOpToolUser(player.getUniqueId());
+        
+        if (isOpToolUser) {
+            plugin.getToolManager().setOpToolUser(player, false);
+            player.sendMessage(ChatColor.YELLOW + "已關閉 OP 管理員棒模式");
+        } else {
+            plugin.getToolManager().setOpToolUser(player, true);
+            player.sendMessage(ChatColor.GREEN + "已啟用 OP 管理員棒模式！");
+            player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊村民來解除永久優化");
+            player.sendMessage(ChatColor.RED + "此工具可解除自動優化系統鎖定的村民");
+        }
+        
+        return true;
+    }
+    
+    /**
      * 處理 /delag info 指令
      */
     private boolean handleInfo(CommandSender sender) {
@@ -169,6 +219,12 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "  追蹤區塊數: " + ChatColor.WHITE + autoStats.get("totalChunks"));
         sender.sendMessage(ChatColor.YELLOW + "  追蹤村民數: " + ChatColor.WHITE + autoStats.get("totalVillagers"));
         sender.sendMessage(ChatColor.YELLOW + "  永久優化數: " + ChatColor.WHITE + autoStats.get("permanentlyOptimized"));
+        sender.sendMessage("");
+        sender.sendMessage(ChatColor.AQUA + "TPS 監控:");
+        sender.sendMessage(ChatColor.YELLOW + "  平均 TPS: " + ChatColor.WHITE + 
+                         String.format("%.1f", plugin.getTPSMonitor().getAverageTPS()));
+        sender.sendMessage(ChatColor.YELLOW + "  卡頓停止: " + (plugin.getTPSMonitor().hasStoppedDueToLag() ? 
+                         ChatColor.RED + "是" : ChatColor.GREEN + "否"));
         sender.sendMessage(ChatColor.GOLD + "======================================");
         
         return true;
@@ -197,6 +253,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "========== DontLag 指令幫助 ==========");
         sender.sendMessage(ChatColor.YELLOW + "/delag ai set" + ChatColor.WHITE + " - 切換 AI 控制工具模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag villager set" + ChatColor.WHITE + " - 切換村民優化工具模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag op set" + ChatColor.RED + " - 切換 OP 管理員棒模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag info" + ChatColor.WHITE + " - 查看插件資訊和統計");
         sender.sendMessage(ChatColor.YELLOW + "/delag reload" + ChatColor.WHITE + " - 重新載入配置");
         sender.sendMessage(ChatColor.GRAY + "提示: 自動村民優化功能會在區塊村民");
@@ -209,7 +266,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("ai", "villager", "info", "reload");
+            List<String> subcommands = Arrays.asList("ai", "villager", "op", "info", "reload");
             String input = args[0].toLowerCase();
             
             for (String subcommand : subcommands) {
@@ -218,7 +275,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager")) {
+            if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager") || args[0].equalsIgnoreCase("op")) {
                 List<String> subcommands = Arrays.asList("set");
                 String input = args[1].toLowerCase();
                 
