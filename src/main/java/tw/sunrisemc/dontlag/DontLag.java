@@ -94,10 +94,12 @@ public class DontLag extends JavaPlugin {
         boolean enabled = getConfig().getBoolean("auto-optimize.enabled", true);
         int threshold = getConfig().getInt("auto-optimize.threshold", 5);
         int interval = getConfig().getInt("auto-optimize.check-interval", 30);
+        int densityThreshold = getConfig().getInt("auto-optimize.density-threshold", 5);
         
         autoVillagerOptimizer.setAutoOptimizeEnabled(enabled);
         autoVillagerOptimizer.setThreshold(threshold);
         autoVillagerOptimizer.setCheckInterval(interval);
+        autoVillagerOptimizer.setDensityThreshold(densityThreshold);
         
         if (enabled) {
             autoVillagerOptimizer.start();

@@ -19,6 +19,11 @@ auto-optimize:
   # 檢查間隔（秒）- 建議 30-60 秒
   check-interval: 30
   
+  # 密集檢測閾值（0.5格內超過此數量的村民會被強制鎖定）
+  # 用於檢測玩家是否濫用繁殖機或使用外掛堆疊村民
+  # 強制鎖定的村民需要管理員使用 OP 管理員棒才能解除
+  density-threshold: 5
+  
   # 智能寬限期系統（固定參數，在代碼中設置）：
   # - 嬰兒村民：完全不會被優化
   # - 成年村民：出生/長大後 30 秒才會開始優化（讓村民有時間移動到暫存區）
@@ -47,6 +52,13 @@ tps-monitor:
   # - 系統會廣播訊息到所有玩家
   # - 管理員可使用 /delag reload 重新啟動
   # - 建議閾值：15.0 TPS（可根據伺服器性能調整）
+
+# Discord 通知設定
+discord:
+  # Discord Webhook URL（留空則不發送通知）
+  # 當檢測到密集村民時，會自動發送警告到 Discord
+  # 獲取方法：Discord 伺服器設定 -> 整合 -> Webhook -> 新建 Webhook -> 複製 URL
+  webhook-url: ""
 
 # 訊息設定
 messages:

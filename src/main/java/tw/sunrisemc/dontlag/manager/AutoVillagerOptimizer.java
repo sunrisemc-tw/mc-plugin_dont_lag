@@ -63,6 +63,11 @@ public class AutoVillagerOptimizer {
         // 初始掃描所有已加載的村民
         scanAllLoadedVillagers();
         
+        // 延遲 2 秒後執行初始密集檢測（確保所有村民都已加載）
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            performInitialDensityCheck();
+        }, 40L); // 40 ticks = 2 秒
+        
         // 啟動定時檢查任務（異步）
         checkTask = new BukkitRunnable() {
             @Override
@@ -91,15 +96,48 @@ public class AutoVillagerOptimizer {
      * 初始掃描所有已加載的村民
      */
     private void scanAllLoadedVillagers() {
+        int count = 0;
         for (World world : plugin.getServer().getWorlds()) {
             for (Chunk chunk : world.getLoadedChunks()) {
                 for (Entity entity : chunk.getEntities()) {
                     if (entity instanceof Villager) {
-                        addVillager((Villager) entity);
+                        Villager villager = (Villager) entity;
+                        String chunkKey = getChunkKey(villager.getLocation().getChunk());
+                        UUID villagerUUID = villager.getUniqueId();
+                        
+                        chunkVillagers.computeIfAbsent(chunkKey, k -> ConcurrentHashMap.newKeySet()).add(villagerUUID);
+                        
+                        // 記錄成年村民的時間戳（嬰兒不記錄）
+                        if (villager.isAdult()) {
+                            villagerAdultTime.putIfAbsent(villagerUUID, System.currentTimeMillis());
+                        }
+                        count++;
                     }
                 }
             }
         }
+        plugin.getLogger().info("初始掃描完成，找到 " + count + " 隻村民");
+    }
+    
+    /**
+     * 執行初始密集檢測（插件啟動時檢查所有已存在的村民）
+     */
+    private void performInitialDensityCheck() {
+        plugin.getLogger().info("開始執行初始密集檢測...");
+        int totalChecked = 0;
+        
+        for (World world : plugin.getServer().getWorlds()) {
+            for (Chunk chunk : world.getLoadedChunks()) {
+                for (Entity entity : chunk.getEntities()) {
+                    if (entity instanceof Villager) {
+                        checkVillagerDensityImmediate((Villager) entity);
+                        totalChecked++;
+                    }
+                }
+            }
+        }
+        
+        plugin.getLogger().info("初始密集檢測完成，檢查了 " + totalChecked + " 隻村民");
     }
     
     /**
@@ -116,8 +154,10 @@ public class AutoVillagerOptimizer {
             villagerAdultTime.putIfAbsent(villagerUUID, System.currentTimeMillis());
         }
         
-        // 移除立即檢查，只依賴定期檢查
-        // checkChunk(chunkKey, villager.getWorld());
+        // 立即檢查該村民位置的密集度（在主線程執行）
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            checkVillagerDensityImmediate(villager);
+        });
     }
     
     /**
@@ -180,7 +220,38 @@ public class AutoVillagerOptimizer {
     }
     
     /**
-     * 檢查村民密集度（0.5格內）
+     * 立即檢查單個村民的密集度（用於新增村民時）
+     */
+    private void checkVillagerDensityImmediate(Villager villager) {
+        if (villager == null || !villager.isValid()) {
+            return;
+        }
+        
+        UUID uuid = villager.getUniqueId();
+        
+        // 跳過已經強制鎖定的
+        if (forceLocked.contains(uuid)) {
+            return;
+        }
+        
+        // 計算 0.5 格內的村民數量
+        Location loc = villager.getLocation();
+        int nearbyCount = 0;
+        
+        for (Entity entity : villager.getNearbyEntities(DENSITY_RADIUS, DENSITY_RADIUS, DENSITY_RADIUS)) {
+            if (entity instanceof Villager) {
+                nearbyCount++;
+            }
+        }
+        
+        // 如果密集度超過閾值，強制鎖定
+        if (nearbyCount >= densityThreshold) {
+            forceLockVillagers(loc, nearbyCount + 1); // +1 包含自己
+        }
+    }
+    
+    /**
+     * 檢查村民密集度（0.5格內）- 批量檢查
      */
     private void checkVillagerDensity(Set<UUID> villagerUUIDs) {
         for (UUID uuid : villagerUUIDs) {
