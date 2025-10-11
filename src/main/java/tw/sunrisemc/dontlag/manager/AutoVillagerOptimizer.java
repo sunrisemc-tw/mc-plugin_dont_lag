@@ -68,7 +68,7 @@ public class AutoVillagerOptimizer {
             performInitialDensityCheck();
         }, 40L); // 40 ticks = 2 秒
         
-        // 啟動定時檢查任務（異步）
+        // 啟動定時檢查任務（同步執行，因為需要訪問世界實體）
         checkTask = new BukkitRunnable() {
             @Override
             public void run() {
@@ -77,7 +77,7 @@ public class AutoVillagerOptimizer {
         };
         
         // 延遲 20 ticks（1秒）後開始，每 checkInterval ticks 執行一次
-        checkTask.runTaskTimerAsynchronously(plugin, 20L, checkInterval);
+        checkTask.runTaskTimer(plugin, 20L, checkInterval);
         
         plugin.getLogger().info("自動村民優化系統已啟動（閾值: " + threshold + " 隻）");
     }
@@ -184,7 +184,7 @@ public class AutoVillagerOptimizer {
     }
     
     /**
-     * 檢查並優化所有區塊的村民
+     * 檢查並優化所有區塊的村民（此方法在主線程執行）
      */
     private void checkAndOptimizeVillagers() {
         int optimizedCount = 0;
@@ -194,23 +194,19 @@ public class AutoVillagerOptimizer {
         
         for (Map.Entry<String, Set<UUID>> entry : chunksCopy.entrySet()) {
             String chunkKey = entry.getKey();
-            Set<UUID> villagerUUIDs = entry.getValue();
+            Set<UUID> villagerUUIDs = new HashSet<>(entry.getValue()); // 創建副本
             
-            // 清理已不存在的村民
+            // 清理已不存在的村民（現在在主線程安全執行）
             villagerUUIDs.removeIf(uuid -> !isVillagerExists(uuid));
             
-            // 先檢查密集度（0.5格內檢測）
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                checkVillagerDensity(villagerUUIDs);
-            });
+            // 檢查密集度（0.5格內檢測）
+            checkVillagerDensity(villagerUUIDs);
             
             // 檢查村民數量
             if (villagerUUIDs.size() >= threshold) {
-                // 需要在主線程中執行優化
-                plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    optimizeChunkVillagers(chunkKey, villagerUUIDs);
-                });
-                optimizedCount += villagerUUIDs.size();
+                // 直接在主線程執行優化
+                int count = optimizeChunkVillagers(chunkKey, villagerUUIDs);
+                optimizedCount += count;
             }
         }
         
@@ -346,8 +342,9 @@ public class AutoVillagerOptimizer {
     
     /**
      * 優化區塊中的所有村民
+     * @return 已優化的村民數量
      */
-    private void optimizeChunkVillagers(String chunkKey, Set<UUID> villagerUUIDs) {
+    private int optimizeChunkVillagers(String chunkKey, Set<UUID> villagerUUIDs) {
         int count = 0;
         long currentTime = System.currentTimeMillis();
         
@@ -379,6 +376,8 @@ public class AutoVillagerOptimizer {
             plugin.getLogger().info("區塊 " + chunkKey + " 的村民數量超過 " + threshold + 
                                   " 隻，已自動優化 " + count + " 隻村民（永久）");
         }
+        
+        return count;
     }
     
     /**
