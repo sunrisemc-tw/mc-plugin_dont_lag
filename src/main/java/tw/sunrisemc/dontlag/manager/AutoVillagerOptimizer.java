@@ -1,11 +1,13 @@
 package tw.sunrisemc.dontlag.manager;
 
 import org.bukkit.Chunk;
+import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitRunnable;
+import tw.sunrisemc.dontlag.util.DiscordWebhook;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,6 +20,7 @@ public class AutoVillagerOptimizer {
     
     private final Plugin plugin;
     private final VillagerManager villagerManager;
+    private DiscordWebhook discordWebhook;
     
     // 使用 ConcurrentHashMap 以支援多線程
     private final Map<String, Set<UUID>> chunkVillagers = new ConcurrentHashMap<>();
@@ -27,9 +30,16 @@ public class AutoVillagerOptimizer {
     private final Map<UUID, Long> villagerAdultTime = new ConcurrentHashMap<>(); // 村民成年時間戳
     private final Map<UUID, Long> lastPlayerInteraction = new ConcurrentHashMap<>(); // 最後玩家互動時間
     
+    // 強制鎖定系統（密集村民檢測）
+    private final Set<UUID> forceLocked = ConcurrentHashMap.newKeySet(); // 強制鎖定的村民
+    
     private int threshold = 5; // 村民數量閾值
     private int checkInterval = 600; // 檢查間隔（ticks，30秒）
     private boolean autoOptimizeEnabled = true;
+    
+    // 密集檢測設定
+    private int densityThreshold = 5; // 0.5格內超過此數量視為密集
+    private static final double DENSITY_RADIUS = 0.5; // 密集檢測半徑
     
     // 時間常數（毫秒）
     private static final long ADULT_GRACE_PERIOD = 30 * 1000; // 成年後30秒寬限期
@@ -149,6 +159,11 @@ public class AutoVillagerOptimizer {
             // 清理已不存在的村民
             villagerUUIDs.removeIf(uuid -> !isVillagerExists(uuid));
             
+            // 先檢查密集度（0.5格內檢測）
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                checkVillagerDensity(villagerUUIDs);
+            });
+            
             // 檢查村民數量
             if (villagerUUIDs.size() >= threshold) {
                 // 需要在主線程中執行優化
@@ -161,6 +176,86 @@ public class AutoVillagerOptimizer {
         
         if (optimizedCount > 0) {
             plugin.getLogger().info("自動優化系統: 優化了 " + optimizedCount + " 隻村民");
+        }
+    }
+    
+    /**
+     * 檢查村民密集度（0.5格內）
+     */
+    private void checkVillagerDensity(Set<UUID> villagerUUIDs) {
+        for (UUID uuid : villagerUUIDs) {
+            // 跳過已經強制鎖定的
+            if (forceLocked.contains(uuid)) {
+                continue;
+            }
+            
+            // 查找村民實體
+            Villager villager = findVillagerByUUID(uuid);
+            if (villager == null) {
+                continue;
+            }
+            
+            // 計算 0.5 格內的村民數量
+            Location loc = villager.getLocation();
+            int nearbyCount = 0;
+            
+            for (Entity entity : villager.getNearbyEntities(DENSITY_RADIUS, DENSITY_RADIUS, DENSITY_RADIUS)) {
+                if (entity instanceof Villager) {
+                    nearbyCount++;
+                }
+            }
+            
+            // 如果密集度超過閾值，強制鎖定
+            if (nearbyCount >= densityThreshold) {
+                forceLockVillagers(loc, nearbyCount + 1); // +1 包含自己
+            }
+        }
+    }
+    
+    /**
+     * 強制鎖定指定位置附近的所有村民
+     */
+    private void forceLockVillagers(Location location, int count) {
+        int lockedCount = 0;
+        
+        // 找出附近所有村民
+        for (Entity entity : location.getWorld().getNearbyEntities(location, DENSITY_RADIUS, DENSITY_RADIUS, DENSITY_RADIUS)) {
+            if (entity instanceof Villager) {
+                Villager villager = (Villager) entity;
+                UUID uuid = villager.getUniqueId();
+                
+                // 如果尚未強制鎖定，進行鎖定
+                if (!forceLocked.contains(uuid)) {
+                    // 優化村民
+                    optimizeVillagerPermanently(villager);
+                    
+                    // 標記為強制鎖定
+                    forceLocked.add(uuid);
+                    permanentlyOptimized.add(uuid);
+                    lockedCount++;
+                }
+            }
+        }
+        
+        if (lockedCount > 0) {
+            plugin.getLogger().warning(String.format(
+                "檢測到密集村民！位置: %s (%.1f, %.1f, %.1f)，已強制鎖定 %d 隻村民",
+                location.getWorld().getName(),
+                location.getX(), location.getY(), location.getZ(),
+                lockedCount
+            ));
+            
+            // 發送 Discord 通知
+            sendDiscordAlert(location, count);
+        }
+    }
+    
+    /**
+     * 發送 Discord 警告
+     */
+    private void sendDiscordAlert(Location location, int villagerCount) {
+        if (discordWebhook != null && discordWebhook.isConfigured()) {
+            discordWebhook.sendVillagerDensityAlert(location, villagerCount);
         }
     }
     
@@ -309,32 +404,62 @@ public class AutoVillagerOptimizer {
     }
     
     /**
-     * 玩家與村民互動時調用（右鍵村民時自動觸發）
-     * 如果村民被永久優化，自動解除並給予10分鐘寬限期
+     * 玩家與村民互動時調用（正常右鍵交易）
+     * 只記錄互動時間，不解除優化（因為優化後仍可交易）
      */
     public void onPlayerInteractVillager(Villager villager) {
         UUID uuid = villager.getUniqueId();
         long currentTime = System.currentTimeMillis();
         
-        // 記錄互動時間
+        // 記錄互動時間（用於寬限期計算）
         lastPlayerInteraction.put(uuid, currentTime);
         
-        // 如果村民被永久優化，自動解除
-        if (permanentlyOptimized.contains(uuid)) {
-            // 恢復村民功能
-            villager.setAware(true);
-            villager.setAI(true);
-            villager.setCollidable(true);
-            
-            // 從永久優化列表移除
-            permanentlyOptimized.remove(uuid);
-            
-            plugin.getLogger().info("玩家互動觸發：村民 " + uuid + " 已自動解除優化，寬限期 10 分鐘");
+        // 不自動解除優化，因為優化後的村民仍可交易
+        // 玩家需要 Shift + 右鍵 才能解除優化
+    }
+    
+    /**
+     * Shift + 右鍵解除優化（玩家要移動村民時使用）
+     * 返回: true = 成功解除, false = 失敗（強制鎖定）
+     */
+    public boolean tryUnlockVillager(Villager villager) {
+        UUID uuid = villager.getUniqueId();
+        
+        // 檢查是否被強制鎖定
+        if (forceLocked.contains(uuid)) {
+            return false; // 強制鎖定的村民玩家無法解除
         }
+        
+        // 檢查是否被優化
+        if (!permanentlyOptimized.contains(uuid)) {
+            return true; // 本來就沒被優化
+        }
+        
+        // 解除優化
+        villager.setAware(true);
+        villager.setAI(true);
+        villager.setCollidable(true);
+        
+        // 從優化列表移除
+        permanentlyOptimized.remove(uuid);
+        
+        // 記錄互動時間（10分鐘寬限期）
+        lastPlayerInteraction.put(uuid, System.currentTimeMillis());
+        
+        plugin.getLogger().info("玩家手動解除村民 " + uuid + " 的優化（Shift+右鍵），寬限期 10 分鐘");
+        return true;
+    }
+    
+    /**
+     * 檢查村民是否被強制鎖定
+     */
+    public boolean isForceLocked(UUID uuid) {
+        return forceLocked.contains(uuid);
     }
     
     /**
      * 解除村民的永久優化（OP 管理員棒專用）
+     * 可以解除包括強制鎖定在內的所有優化
      */
     public boolean unlockVillager(Villager villager) {
         UUID uuid = villager.getUniqueId();
@@ -351,6 +476,9 @@ public class AutoVillagerOptimizer {
         // 從永久優化列表移除
         permanentlyOptimized.remove(uuid);
         
+        // 從強制鎖定列表移除（如果有的話）
+        boolean wasForceLocked = forceLocked.remove(uuid);
+        
         // 從區塊追蹤中移除（避免再次被優化）
         String chunkKey = getChunkKey(villager.getLocation().getChunk());
         Set<UUID> villagers = chunkVillagers.get(chunkKey);
@@ -358,8 +486,39 @@ public class AutoVillagerOptimizer {
             villagers.remove(uuid);
         }
         
-        plugin.getLogger().info("管理員解除了村民 " + uuid + " 的永久優化");
+        if (wasForceLocked) {
+            plugin.getLogger().info("管理員解除了村民 " + uuid + " 的強制鎖定");
+        } else {
+            plugin.getLogger().info("管理員解除了村民 " + uuid + " 的永久優化");
+        }
         return true;
+    }
+    
+    /**
+     * 通過 UUID 查找村民實體
+     */
+    private Villager findVillagerByUUID(UUID uuid) {
+        for (World world : plugin.getServer().getWorlds()) {
+            Entity entity = getEntityByUUID(world, uuid);
+            if (entity instanceof Villager) {
+                return (Villager) entity;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * 設置 Discord Webhook（由主類調用）
+     */
+    public void setDiscordWebhook(DiscordWebhook webhook) {
+        this.discordWebhook = webhook;
+    }
+    
+    /**
+     * 設置密集檢測閾值
+     */
+    public void setDensityThreshold(int threshold) {
+        this.densityThreshold = threshold;
     }
     
     /**
@@ -416,6 +575,7 @@ public class AutoVillagerOptimizer {
         permanentlyOptimized.clear();
         villagerAdultTime.clear();
         lastPlayerInteraction.clear();
+        forceLocked.clear();
     }
 }
 

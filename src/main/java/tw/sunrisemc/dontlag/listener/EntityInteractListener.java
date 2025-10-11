@@ -32,17 +32,38 @@ public class EntityInteractListener implements Listener {
         Entity entity = event.getRightClicked();
         ItemStack item = player.getInventory().getItemInMainHand();
         
-        // 自動處理村民互動（解除優化、記錄互動時間）
+        // 自動處理村民互動
         if (entity instanceof org.bukkit.entity.Villager) {
             org.bukkit.entity.Villager villager = (org.bukkit.entity.Villager) entity;
-            plugin.getAutoVillagerOptimizer().onPlayerInteractVillager(villager);
             
-            // 如果村民剛被解除優化，發送提示訊息
-            if (plugin.getAutoVillagerOptimizer().isPermanentlyOptimized(villager.getUniqueId())) {
-                // 不會進入這裡，因為上面已經解除了
+            // Shift + 右鍵：解除優化（讓玩家可以移動村民）
+            if (player.isSneaking()) {
+                UUID villagerUUID = villager.getUniqueId();
+                
+                // 檢查是否被優化
+                if (plugin.getAutoVillagerOptimizer().isPermanentlyOptimized(villagerUUID)) {
+                    // 嘗試解除優化
+                    boolean success = plugin.getAutoVillagerOptimizer().tryUnlockVillager(villager);
+                    
+                    if (success) {
+                        player.sendMessage(ChatColor.GREEN + "✓ 已解除村民優化，可以移動和設定職業了！");
+                        player.sendMessage(ChatColor.GRAY + "10 分鐘內不會重新被優化");
+                        event.setCancelled(true); // 取消交易界面
+                        return;
+                    } else {
+                        // 強制鎖定的村民無法解除
+                        player.sendMessage(ChatColor.RED + "✗ 此村民被強制鎖定，無法解除！");
+                        player.sendMessage(ChatColor.YELLOW + "原因：檢測到密集村民（0.5格內超過閾值）");
+                        player.sendMessage(ChatColor.GRAY + "請聯繫管理員使用管理員棒解除");
+                        event.setCancelled(true);
+                        return;
+                    }
+                }
+                // 如果沒被優化，就正常交易（不做任何事）
             } else {
-                // 檢查是否之前有記錄（表示剛剛被解除優化）
-                // 這邊簡化處理，不額外發送訊息避免干擾正常交易
+                // 正常右鍵：記錄互動時間（用於寬限期計算）
+                plugin.getAutoVillagerOptimizer().onPlayerInteractVillager(villager);
+                // 不取消事件，讓交易正常進行
             }
         }
         

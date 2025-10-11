@@ -38,6 +38,9 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             case "op":
                 return handleOP(sender, args);
                 
+            case "admin":
+                return handleAdmin(sender, args);
+                
             case "info":
                 return handleInfo(sender);
                 
@@ -179,12 +182,71 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         
         if (isOpToolUser) {
             plugin.getToolManager().setOpToolUser(player, false);
-            player.sendMessage(ChatColor.YELLOW + "已關閉 OP 管理員棒模式");
+            player.sendMessage(ChatColor.YELLOW + "已關閉管理員棒模式");
         } else {
             plugin.getToolManager().setOpToolUser(player, true);
-            player.sendMessage(ChatColor.GREEN + "已啟用 OP 管理員棒模式！");
-            player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊村民來解除永久優化");
-            player.sendMessage(ChatColor.RED + "此工具可解除自動優化系統鎖定的村民");
+            player.sendMessage(ChatColor.GREEN + "已啟用管理員棒模式！");
+            player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊村民來解除優化");
+            player.sendMessage(ChatColor.RED + "此工具可解除包括強制鎖定在內的所有優化");
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 處理 /delag admin 指令
+     */
+    private boolean handleAdmin(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("dontlag.admin")) {
+            sender.sendMessage(ChatColor.RED + "你沒有權限使用此指令！");
+            return true;
+        }
+        
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag admin set webhook <url>");
+            return true;
+        }
+        
+        if (args[1].equalsIgnoreCase("set")) {
+            if (args.length < 3) {
+                sender.sendMessage(ChatColor.RED + "用法: /delag admin set webhook <url>");
+                return true;
+            }
+            
+            if (args[2].equalsIgnoreCase("webhook")) {
+                return handleWebhookSet(sender, args);
+            }
+        }
+        
+        sender.sendMessage(ChatColor.RED + "用法: /delag admin set webhook <url>");
+        return true;
+    }
+    
+    /**
+     * 處理 /delag admin set webhook 指令
+     */
+    private boolean handleWebhookSet(CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag admin set webhook <url>");
+            sender.sendMessage(ChatColor.GRAY + "範例: /delag admin set webhook https://discord.com/api/webhooks/...");
+            sender.sendMessage(ChatColor.GRAY + "移除 webhook: /delag admin set webhook none");
+            return true;
+        }
+        
+        String webhookUrl = args[3];
+        
+        // 儲存到配置
+        plugin.getConfig().set("discord.webhook-url", webhookUrl);
+        plugin.saveConfig();
+        
+        // 更新 webhook
+        plugin.loadWebhookConfig();
+        
+        if (webhookUrl.equalsIgnoreCase("none")) {
+            sender.sendMessage(ChatColor.GREEN + "✓ Discord Webhook 已移除");
+        } else {
+            sender.sendMessage(ChatColor.GREEN + "✓ Discord Webhook 已設定");
+            sender.sendMessage(ChatColor.GRAY + "當檢測到密集村民時，將自動通知管理員");
         }
         
         return true;
@@ -219,12 +281,6 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "  追蹤區塊數: " + ChatColor.WHITE + autoStats.get("totalChunks"));
         sender.sendMessage(ChatColor.YELLOW + "  追蹤村民數: " + ChatColor.WHITE + autoStats.get("totalVillagers"));
         sender.sendMessage(ChatColor.YELLOW + "  永久優化數: " + ChatColor.WHITE + autoStats.get("permanentlyOptimized"));
-        sender.sendMessage("");
-        sender.sendMessage(ChatColor.AQUA + "TPS 監控:");
-        sender.sendMessage(ChatColor.YELLOW + "  平均 TPS: " + ChatColor.WHITE + 
-                         String.format("%.1f", plugin.getTPSMonitor().getAverageTPS()));
-        sender.sendMessage(ChatColor.YELLOW + "  卡頓停止: " + (plugin.getTPSMonitor().hasStoppedDueToLag() ? 
-                         ChatColor.RED + "是" : ChatColor.GREEN + "否"));
         sender.sendMessage(ChatColor.GOLD + "======================================");
         
         return true;
@@ -253,11 +309,12 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "========== DontLag 指令幫助 ==========");
         sender.sendMessage(ChatColor.YELLOW + "/delag ai set" + ChatColor.WHITE + " - 切換 AI 控制工具模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag villager set" + ChatColor.WHITE + " - 切換村民優化工具模式");
-        sender.sendMessage(ChatColor.YELLOW + "/delag op set" + ChatColor.RED + " - 切換 OP 管理員棒模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag op set" + ChatColor.RED + " - 切換管理員棒模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag admin set webhook <url>" + ChatColor.RED + " - 設定 Discord Webhook");
         sender.sendMessage(ChatColor.YELLOW + "/delag info" + ChatColor.WHITE + " - 查看插件資訊和統計");
         sender.sendMessage(ChatColor.YELLOW + "/delag reload" + ChatColor.WHITE + " - 重新載入配置");
-        sender.sendMessage(ChatColor.GRAY + "提示: 自動村民優化功能會在區塊村民");
-        sender.sendMessage(ChatColor.GRAY + "      超過閾值時自動優化（可在配置中調整）");
+        sender.sendMessage(ChatColor.GRAY + "玩家提示: Shift + 右鍵村民可解除優化");
+        sender.sendMessage(ChatColor.GRAY + "管理員: 密集村民會被強制鎖定並通知");
         sender.sendMessage(ChatColor.GOLD + "======================================");
     }
     
@@ -266,7 +323,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("ai", "villager", "op", "info", "reload");
+            List<String> subcommands = Arrays.asList("ai", "villager", "op", "admin", "info", "reload");
             String input = args[0].toLowerCase();
             
             for (String subcommand : subcommands) {
@@ -275,7 +332,8 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
                 }
             }
         } else if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager") || args[0].equalsIgnoreCase("op")) {
+            if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager") || 
+                args[0].equalsIgnoreCase("op") || args[0].equalsIgnoreCase("admin")) {
                 List<String> subcommands = Arrays.asList("set");
                 String input = args[1].toLowerCase();
                 
@@ -285,10 +343,25 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
                     }
                 }
             }
+        } else if (args.length == 3) {
+            if (args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("set")) {
+                List<String> options = Arrays.asList("webhook");
+                String input = args[2].toLowerCase();
+                
+                for (String option : options) {
+                    if (option.startsWith(input)) {
+                        completions.add(option);
+                    }
+                }
+            }
+        } else if (args.length == 4) {
+            if (args[0].equalsIgnoreCase("admin") && args[1].equalsIgnoreCase("set") && 
+                args[2].equalsIgnoreCase("webhook")) {
+                completions.add("<Discord_Webhook_URL>");
+            }
         }
         
         return completions;
     }
 }
-
 
