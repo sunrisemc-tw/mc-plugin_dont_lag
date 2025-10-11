@@ -8,6 +8,7 @@ import tw.sunrisemc.dontlag.manager.AIManager;
 import tw.sunrisemc.dontlag.manager.AutoVillagerOptimizer;
 import tw.sunrisemc.dontlag.manager.ToolManager;
 import tw.sunrisemc.dontlag.manager.VillagerManager;
+import tw.sunrisemc.dontlag.util.DiscordWebhook;
 
 public class DontLag extends JavaPlugin {
     
@@ -16,6 +17,7 @@ public class DontLag extends JavaPlugin {
     private AIManager aiManager;
     private VillagerManager villagerManager;
     private AutoVillagerOptimizer autoVillagerOptimizer;
+    private DiscordWebhook discordWebhook;
     
     @Override
     public void onEnable() {
@@ -29,9 +31,11 @@ public class DontLag extends JavaPlugin {
         aiManager = new AIManager(this);
         villagerManager = new VillagerManager(this);
         autoVillagerOptimizer = new AutoVillagerOptimizer(this, villagerManager);
+        discordWebhook = new DiscordWebhook(this);
         
         // 載入配置並啟動自動優化
         loadAutoOptimizerConfig();
+        loadWebhookConfig();
         
         // 註冊指令
         getCommand("delag").setExecutor(new DelagCommand(this));
@@ -101,11 +105,25 @@ public class DontLag extends JavaPlugin {
     }
     
     /**
+     * 載入 Webhook 配置
+     */
+    public void loadWebhookConfig() {
+        String webhookUrl = getConfig().getString("discord.webhook-url", "");
+        discordWebhook.setWebhookUrl(webhookUrl);
+        autoVillagerOptimizer.setDiscordWebhook(discordWebhook);
+        
+        if (discordWebhook.isConfigured()) {
+            getLogger().info("Discord Webhook 已配置");
+        }
+    }
+    
+    /**
      * 重新載入配置
      */
     public void reloadPluginConfig() {
         reloadConfig();
         loadAutoOptimizerConfig();
+        loadWebhookConfig();
     }
 }
 
