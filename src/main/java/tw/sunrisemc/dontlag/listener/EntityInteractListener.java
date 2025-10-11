@@ -32,6 +32,20 @@ public class EntityInteractListener implements Listener {
         Entity entity = event.getRightClicked();
         ItemStack item = player.getInventory().getItemInMainHand();
         
+        // 自動處理村民互動（解除優化、記錄互動時間）
+        if (entity instanceof org.bukkit.entity.Villager) {
+            org.bukkit.entity.Villager villager = (org.bukkit.entity.Villager) entity;
+            plugin.getAutoVillagerOptimizer().onPlayerInteractVillager(villager);
+            
+            // 如果村民剛被解除優化，發送提示訊息
+            if (plugin.getAutoVillagerOptimizer().isPermanentlyOptimized(villager.getUniqueId())) {
+                // 不會進入這裡，因為上面已經解除了
+            } else {
+                // 檢查是否之前有記錄（表示剛剛被解除優化）
+                // 這邊簡化處理，不額外發送訊息避免干擾正常交易
+            }
+        }
+        
         // 處理 OP 管理員棒
         if (plugin.getToolManager().isOpToolUser(player.getUniqueId()) && 
             plugin.getToolManager().isOpTool(item)) {

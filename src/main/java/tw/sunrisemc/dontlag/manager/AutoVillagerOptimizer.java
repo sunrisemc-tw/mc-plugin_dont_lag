@@ -23,9 +23,17 @@ public class AutoVillagerOptimizer {
     private final Map<String, Set<UUID>> chunkVillagers = new ConcurrentHashMap<>();
     private final Set<UUID> permanentlyOptimized = ConcurrentHashMap.newKeySet();
     
+    // 新增：追蹤村民的成年時間和最後互動時間
+    private final Map<UUID, Long> villagerAdultTime = new ConcurrentHashMap<>(); // 村民成年時間戳
+    private final Map<UUID, Long> lastPlayerInteraction = new ConcurrentHashMap<>(); // 最後玩家互動時間
+    
     private int threshold = 5; // 村民數量閾值
     private int checkInterval = 600; // 檢查間隔（ticks，30秒）
     private boolean autoOptimizeEnabled = true;
+    
+    // 時間常數（毫秒）
+    private static final long ADULT_GRACE_PERIOD = 30 * 1000; // 成年後30秒寬限期
+    private static final long INTERACTION_GRACE_PERIOD = 10 * 60 * 1000; // 互動後10分鐘寬限期
     
     private BukkitRunnable checkTask;
     
@@ -93,8 +101,13 @@ public class AutoVillagerOptimizer {
         
         chunkVillagers.computeIfAbsent(chunkKey, k -> ConcurrentHashMap.newKeySet()).add(villagerUUID);
         
-        // 檢查該區塊是否需要優化
-        checkChunk(chunkKey, villager.getWorld());
+        // 記錄成年村民的時間戳（嬰兒不記錄）
+        if (villager.isAdult()) {
+            villagerAdultTime.putIfAbsent(villagerUUID, System.currentTimeMillis());
+        }
+        
+        // 移除立即檢查，只依賴定期檢查
+        // checkChunk(chunkKey, villager.getWorld());
     }
     
     /**
@@ -114,7 +127,10 @@ public class AutoVillagerOptimizer {
             }
         }
         
+        // 清理所有相關追蹤數據
         permanentlyOptimized.remove(villagerUUID);
+        villagerAdultTime.remove(villagerUUID);
+        lastPlayerInteraction.remove(villagerUUID);
     }
     
     /**
@@ -167,6 +183,7 @@ public class AutoVillagerOptimizer {
      */
     private void optimizeChunkVillagers(String chunkKey, Set<UUID> villagerUUIDs) {
         int count = 0;
+        long currentTime = System.currentTimeMillis();
         
         for (UUID uuid : villagerUUIDs) {
             // 跳過已經永久優化的村民
@@ -180,10 +197,13 @@ public class AutoVillagerOptimizer {
                 if (entity instanceof Villager) {
                     Villager villager = (Villager) entity;
                     
-                    // 優化村民
-                    optimizeVillagerPermanently(villager);
-                    permanentlyOptimized.add(uuid);
-                    count++;
+                    // 檢查是否可以優化
+                    if (canOptimizeVillager(villager, currentTime)) {
+                        // 優化村民
+                        optimizeVillagerPermanently(villager);
+                        permanentlyOptimized.add(uuid);
+                        count++;
+                    }
                     break;
                 }
             }
@@ -193,6 +213,41 @@ public class AutoVillagerOptimizer {
             plugin.getLogger().info("區塊 " + chunkKey + " 的村民數量超過 " + threshold + 
                                   " 隻，已自動優化 " + count + " 隻村民（永久）");
         }
+    }
+    
+    /**
+     * 檢查村民是否可以被優化
+     */
+    private boolean canOptimizeVillager(Villager villager, long currentTime) {
+        UUID uuid = villager.getUniqueId();
+        
+        // 1. 嬰兒村民不優化
+        if (!villager.isAdult()) {
+            return false;
+        }
+        
+        // 2. 檢查成年時間是否超過30秒
+        Long adultTime = villagerAdultTime.get(uuid);
+        if (adultTime != null) {
+            if (currentTime - adultTime < ADULT_GRACE_PERIOD) {
+                return false; // 成年不到30秒，不優化
+            }
+        } else {
+            // 如果沒有記錄，現在記錄並給予寬限期
+            villagerAdultTime.put(uuid, currentTime);
+            return false;
+        }
+        
+        // 3. 檢查最後互動時間（10分鐘內有互動則不優化）
+        Long lastInteraction = lastPlayerInteraction.get(uuid);
+        if (lastInteraction != null) {
+            if (currentTime - lastInteraction < INTERACTION_GRACE_PERIOD) {
+                return false; // 10分鐘內有互動，不優化
+            }
+        }
+        
+        // 通過所有檢查，可以優化
+        return true;
     }
     
     /**
@@ -251,6 +306,31 @@ public class AutoVillagerOptimizer {
      */
     public boolean isPermanentlyOptimized(UUID uuid) {
         return permanentlyOptimized.contains(uuid);
+    }
+    
+    /**
+     * 玩家與村民互動時調用（右鍵村民時自動觸發）
+     * 如果村民被永久優化，自動解除並給予10分鐘寬限期
+     */
+    public void onPlayerInteractVillager(Villager villager) {
+        UUID uuid = villager.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+        
+        // 記錄互動時間
+        lastPlayerInteraction.put(uuid, currentTime);
+        
+        // 如果村民被永久優化，自動解除
+        if (permanentlyOptimized.contains(uuid)) {
+            // 恢復村民功能
+            villager.setAware(true);
+            villager.setAI(true);
+            villager.setCollidable(true);
+            
+            // 從永久優化列表移除
+            permanentlyOptimized.remove(uuid);
+            
+            plugin.getLogger().info("玩家互動觸發：村民 " + uuid + " 已自動解除優化，寬限期 10 分鐘");
+        }
     }
     
     /**
@@ -334,6 +414,8 @@ public class AutoVillagerOptimizer {
     public void clear() {
         chunkVillagers.clear();
         permanentlyOptimized.clear();
+        villagerAdultTime.clear();
+        lastPlayerInteraction.clear();
     }
 }
 
