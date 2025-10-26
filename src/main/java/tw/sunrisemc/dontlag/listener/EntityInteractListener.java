@@ -81,6 +81,13 @@ public class EntityInteractListener implements Listener {
             return;
         }
         
+        // 處理雞優化工具
+        if (plugin.getToolManager().isChickenToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isChickenTool(item)) {
+            handleChickenOptimization(player, entity, event);
+            return;
+        }
+        
         // 處理 AI 控制工具
         if (plugin.getToolManager().isToolUser(player.getUniqueId()) && 
             plugin.getToolManager().isAITool(item)) {
@@ -228,6 +235,52 @@ public class EntityInteractListener implements Listener {
         }
     }
     
+    /**
+     * 處理雞優化
+     */
+    private void handleChickenOptimization(Player player, Entity entity, PlayerInteractEntityEvent event) {
+        // 檢查權限
+        if (!player.hasPermission("dontlag.use")) {
+            player.sendMessage(ChatColor.RED + "你沒有權限使用此功能！");
+            return;
+        }
+        
+        // 檢查是否為雞
+        if (!(entity instanceof org.bukkit.entity.Chicken)) {
+            player.sendMessage(ChatColor.RED + "此工具只能用於雞！");
+            return;
+        }
+        
+        // 防止重複觸發
+        UUID entityUUID = entity.getUniqueId();
+        long currentTime = System.currentTimeMillis();
+        Long lastTime = lastInteraction.get(entityUUID);
+        
+        if (lastTime != null && (currentTime - lastTime) < COOLDOWN) {
+            return;
+        }
+        
+        lastInteraction.put(entityUUID, currentTime);
+        
+        // 取消原本的互動
+        event.setCancelled(true);
+        
+        // 切換優化狀態
+        boolean optimized = plugin.getChickenManager().toggleOptimization(entity);
+        
+        String entityName = getEntityDisplayName(entity);
+        
+        if (optimized) {
+            player.sendMessage(ChatColor.GREEN + "已優化雞 " + ChatColor.YELLOW + entityName);
+            player.sendMessage(ChatColor.GRAY + "該雞現在只保留成長和下蛋功能");
+            player.sendMessage(ChatColor.GRAY + "已移除: 移動、尋路等其他 AI 行為");
+        } else {
+            player.sendMessage(ChatColor.YELLOW + "已恢復雞 " + ChatColor.YELLOW + entityName + 
+                             ChatColor.YELLOW + " 的所有功能");
+            player.sendMessage(ChatColor.GRAY + "該雞現在恢復正常行為");
+        }
+    }
+    
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -272,6 +325,23 @@ public class EntityInteractListener implements Listener {
             player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + plugin.getVillagerManager().getOptimizedCount() + 
                              ChatColor.GRAY + " 個村民被優化");
             player.sendMessage(ChatColor.GOLD + "=================================");
+            return;
+        }
+        
+        // 處理雞優化工具
+        if (plugin.getToolManager().isChickenToolUser(player.getUniqueId()) && 
+            plugin.getToolManager().isChickenTool(item)) {
+            
+            event.setCancelled(true);
+            
+            player.sendMessage(ChatColor.GOLD + "========== 雞優化工具 ==========");
+            player.sendMessage(ChatColor.YELLOW + "右鍵點擊雞: " + ChatColor.WHITE + "優化雞功能");
+            player.sendMessage(ChatColor.YELLOW + "左鍵點擊: " + ChatColor.WHITE + "顯示此說明");
+            player.sendMessage(ChatColor.GRAY + "優化內容: " + ChatColor.WHITE + "只保留成長和下蛋");
+            player.sendMessage(ChatColor.GRAY + "移除內容: " + ChatColor.WHITE + "移動、尋路等 AI 行為");
+            player.sendMessage(ChatColor.GRAY + "目前有 " + ChatColor.WHITE + plugin.getChickenManager().getOptimizedCount() + 
+                             ChatColor.GRAY + " 隻雞被優化");
+            player.sendMessage(ChatColor.GOLD + "==============================");
             return;
         }
         

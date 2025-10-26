@@ -35,6 +35,9 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             case "villager":
                 return handleVillager(sender, args);
                 
+            case "chicken":
+                return handleChicken(sender, args);
+                
             case "op":
                 return handleOP(sender, args);
                 
@@ -141,6 +144,53 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(ChatColor.GREEN + "已啟用村民優化工具模式！");
             player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊村民來優化其功能");
             player.sendMessage(ChatColor.GRAY + "優化後村民只保留交易和補貨功能");
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 處理 /delag chicken 指令
+     */
+    private boolean handleChicken(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage(ChatColor.RED + "用法: /delag chicken set");
+            return true;
+        }
+        
+        if (args[1].equalsIgnoreCase("set")) {
+            return handleChickenSet(sender);
+        }
+        
+        sender.sendMessage(ChatColor.RED + "用法: /delag chicken set");
+        return true;
+    }
+    
+    /**
+     * 處理 /delag chicken set 指令
+     */
+    private boolean handleChickenSet(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "此指令只能由玩家執行！");
+            return true;
+        }
+        
+        if (!sender.hasPermission("dontlag.admin")) {
+            sender.sendMessage(ChatColor.RED + "你沒有權限使用此指令！");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        boolean isChickenToolUser = plugin.getToolManager().isChickenToolUser(player.getUniqueId());
+        
+        if (isChickenToolUser) {
+            plugin.getToolManager().setChickenToolUser(player, false);
+            player.sendMessage(ChatColor.YELLOW + "已關閉雞優化工具模式");
+        } else {
+            plugin.getToolManager().setChickenToolUser(player, true);
+            player.sendMessage(ChatColor.GREEN + "已啟用雞優化工具模式！");
+            player.sendMessage(ChatColor.GRAY + "使用木棒右鍵點擊雞來優化其功能");
+            player.sendMessage(ChatColor.GRAY + "優化後雞只保留成長和下蛋功能");
         }
         
         return true;
@@ -263,9 +313,11 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         
         int disabledCount = plugin.getAIManager().getDisabledCount();
         int optimizedVillagers = plugin.getVillagerManager().getOptimizedCount();
+        int optimizedChickens = plugin.getChickenManager().getOptimizedCount();
         
         // 獲取自動優化統計
         Map<String, Object> autoStats = plugin.getAutoVillagerOptimizer().getStats();
+        Map<String, Object> chickenStats = plugin.getAutoChickenOptimizer().getStats();
         
         sender.sendMessage(ChatColor.GOLD + "============ DontLag 資訊 ============");
         sender.sendMessage(ChatColor.YELLOW + "版本: " + ChatColor.WHITE + plugin.getDescription().getVersion());
@@ -273,6 +325,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.AQUA + "手動優化:");
         sender.sendMessage(ChatColor.YELLOW + "  已關閉 AI 的生物: " + ChatColor.WHITE + disabledCount);
         sender.sendMessage(ChatColor.YELLOW + "  已優化的村民: " + ChatColor.WHITE + optimizedVillagers);
+        sender.sendMessage(ChatColor.YELLOW + "  已優化的雞: " + ChatColor.WHITE + optimizedChickens);
         sender.sendMessage("");
         sender.sendMessage(ChatColor.AQUA + "自動村民優化:");
         sender.sendMessage(ChatColor.YELLOW + "  狀態: " + (autoStats.get("enabled").equals(true) ? 
@@ -281,6 +334,14 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "  追蹤區塊數: " + ChatColor.WHITE + autoStats.get("totalChunks"));
         sender.sendMessage(ChatColor.YELLOW + "  追蹤村民數: " + ChatColor.WHITE + autoStats.get("totalVillagers"));
         sender.sendMessage(ChatColor.YELLOW + "  永久優化數: " + ChatColor.WHITE + autoStats.get("permanentlyOptimized"));
+        sender.sendMessage("");
+        sender.sendMessage(ChatColor.AQUA + "自動雞優化:");
+        sender.sendMessage(ChatColor.YELLOW + "  狀態: " + (chickenStats.get("enabled").equals(true) ? 
+                         ChatColor.GREEN + "啟用" : ChatColor.RED + "停用"));
+        sender.sendMessage(ChatColor.YELLOW + "  閾值: " + ChatColor.WHITE + chickenStats.get("threshold") + " 隻/區塊");
+        sender.sendMessage(ChatColor.YELLOW + "  追蹤區塊數: " + ChatColor.WHITE + chickenStats.get("totalChunks"));
+        sender.sendMessage(ChatColor.YELLOW + "  追蹤雞數: " + ChatColor.WHITE + chickenStats.get("totalChickens"));
+        sender.sendMessage(ChatColor.YELLOW + "  永久優化數: " + ChatColor.WHITE + chickenStats.get("permanentlyOptimized"));
         sender.sendMessage(ChatColor.GOLD + "======================================");
         
         return true;
@@ -309,12 +370,13 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "========== DontLag 指令幫助 ==========");
         sender.sendMessage(ChatColor.YELLOW + "/delag ai set" + ChatColor.WHITE + " - 切換 AI 控制工具模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag villager set" + ChatColor.WHITE + " - 切換村民優化工具模式");
+        sender.sendMessage(ChatColor.YELLOW + "/delag chicken set" + ChatColor.WHITE + " - 切換雞優化工具模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag op set" + ChatColor.RED + " - 切換管理員棒模式");
         sender.sendMessage(ChatColor.YELLOW + "/delag admin set webhook <url>" + ChatColor.RED + " - 設定 Discord Webhook");
         sender.sendMessage(ChatColor.YELLOW + "/delag info" + ChatColor.WHITE + " - 查看插件資訊和統計");
         sender.sendMessage(ChatColor.YELLOW + "/delag reload" + ChatColor.WHITE + " - 重新載入配置");
         sender.sendMessage(ChatColor.GRAY + "玩家提示: Shift + 右鍵村民可解除優化");
-        sender.sendMessage(ChatColor.GRAY + "管理員: 密集村民會被強制鎖定並通知");
+        sender.sendMessage(ChatColor.GRAY + "管理員: 密集村民/雞會被強制鎖定並通知");
         sender.sendMessage(ChatColor.GOLD + "======================================");
     }
     
@@ -323,7 +385,7 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
         List<String> completions = new ArrayList<>();
         
         if (args.length == 1) {
-            List<String> subcommands = Arrays.asList("ai", "villager", "op", "admin", "info", "reload");
+            List<String> subcommands = Arrays.asList("ai", "villager", "chicken", "op", "admin", "info", "reload");
             String input = args[0].toLowerCase();
             
             for (String subcommand : subcommands) {
@@ -333,7 +395,8 @@ public class DelagCommand implements CommandExecutor, TabCompleter {
             }
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("ai") || args[0].equalsIgnoreCase("villager") || 
-                args[0].equalsIgnoreCase("op") || args[0].equalsIgnoreCase("admin")) {
+                args[0].equalsIgnoreCase("chicken") || args[0].equalsIgnoreCase("op") || 
+                args[0].equalsIgnoreCase("admin")) {
                 List<String> subcommands = Arrays.asList("set");
                 String input = args[1].toLowerCase();
                 

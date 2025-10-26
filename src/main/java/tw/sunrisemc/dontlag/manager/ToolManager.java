@@ -15,9 +15,11 @@ public class ToolManager {
     
     private final HashMap<UUID, Boolean> toolUsers = new HashMap<>();
     private final HashMap<UUID, Boolean> villagerToolUsers = new HashMap<>();
+    private final HashMap<UUID, Boolean> chickenToolUsers = new HashMap<>();
     private final HashMap<UUID, Boolean> opToolUsers = new HashMap<>();
     private static final String TOOL_NAME = ChatColor.GOLD + "" + ChatColor.BOLD + "AI 控制工具";
     private static final String VILLAGER_TOOL_NAME = ChatColor.AQUA + "" + ChatColor.BOLD + "村民優化工具";
+    private static final String CHICKEN_TOOL_NAME = ChatColor.GREEN + "" + ChatColor.BOLD + "雞優化工具";
     private static final String OP_TOOL_NAME = ChatColor.RED + "" + ChatColor.BOLD + "OP 管理員棒";
     
     /**
@@ -59,6 +61,25 @@ public class ToolManager {
     }
     
     /**
+     * 設定玩家是否持有雞優化工具
+     */
+    public void setChickenToolUser(Player player, boolean enabled) {
+        if (enabled) {
+            chickenToolUsers.put(player.getUniqueId(), true);
+            giveChickenTool(player);
+        } else {
+            chickenToolUsers.remove(player.getUniqueId());
+        }
+    }
+    
+    /**
+     * 檢查玩家是否為雞工具使用者
+     */
+    public boolean isChickenToolUser(UUID uuid) {
+        return chickenToolUsers.getOrDefault(uuid, false);
+    }
+    
+    /**
      * 給予玩家村民優化工具
      */
     private void giveVillagerTool(Player player) {
@@ -72,6 +93,29 @@ public class ToolManager {
             lore.add(ChatColor.GRAY + "右鍵點擊村民來優化其功能");
             lore.add(ChatColor.GRAY + "只保留交易和補貨功能");
             lore.add(ChatColor.GRAY + "移除代理(gossip)、工作站尋找等");
+            lore.add(ChatColor.YELLOW + "左鍵點擊查看使用說明");
+            meta.setLore(lore);
+            
+            stick.setItemMeta(meta);
+        }
+        
+        player.getInventory().addItem(stick);
+    }
+    
+    /**
+     * 給予玩家雞優化工具
+     */
+    private void giveChickenTool(Player player) {
+        ItemStack stick = new ItemStack(Material.STICK);
+        ItemMeta meta = stick.getItemMeta();
+        
+        if (meta != null) {
+            meta.setDisplayName(CHICKEN_TOOL_NAME);
+            
+            List<String> lore = new ArrayList<>();
+            lore.add(ChatColor.GRAY + "右鍵點擊雞來優化其功能");
+            lore.add(ChatColor.GRAY + "只保留成長和下蛋功能");
+            lore.add(ChatColor.GRAY + "關閉移動和其他 AI 行為");
             lore.add(ChatColor.YELLOW + "左鍵點擊查看使用說明");
             meta.setLore(lore);
             
@@ -133,6 +177,22 @@ public class ToolManager {
         }
         
         return meta.getDisplayName().equals(VILLAGER_TOOL_NAME);
+    }
+    
+    /**
+     * 檢查物品是否為雞優化工具
+     */
+    public boolean isChickenTool(ItemStack item) {
+        if (item == null || item.getType() != Material.STICK) {
+            return false;
+        }
+        
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) {
+            return false;
+        }
+        
+        return meta.getDisplayName().equals(CHICKEN_TOOL_NAME);
     }
     
     /**
